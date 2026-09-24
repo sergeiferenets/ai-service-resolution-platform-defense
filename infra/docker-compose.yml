@@ -110,7 +110,7 @@ services:
       - --revision=${LLM_MODEL_REVISION:?Set LLM_MODEL_REVISION}
       - --tokenizer-revision=${LLM_MODEL_REVISION:?Set LLM_MODEL_REVISION}
       - --served-model-name=${LLM_SERVED_NAME}
-      # awq_marlin — ядра для Ampere и новее. RTX 6000 Ada = sm_89, подходит.
+      # awq_marlin — ядра для Ampere и новее. RTX 4090 = sm_89, подходит.
       # ADR-0005 называет это ограничение жёстким.
       - --quantization=awq_marlin
       - --dtype=float16
