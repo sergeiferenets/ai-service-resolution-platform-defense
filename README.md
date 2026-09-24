@@ -171,19 +171,30 @@ sudo bash infra/bootstrap.sh --check
 адреса стенда, а не публичные demo URL.
 
 ```bash
-ssh -N -L 8501:127.0.0.1:8501 -L 8000:127.0.0.1:8000 -L 8001:127.0.0.1:8001 -L 8002:127.0.0.1:8002 -L 8003:127.0.0.1:8003 -L 6333:127.0.0.1:6333 -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 root@<адрес>
+ssh -N -L 8501:127.0.0.1:8501 -L 8000:127.0.0.1:8000 -L 8100:127.0.0.1:8100 -L 8001:127.0.0.1:8001 -L 8002:127.0.0.1:8002 -L 8003:127.0.0.1:8003 -L 6333:127.0.0.1:6333 -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 root@<адрес>
 ```
 
 | Что | Адрес после туннеля |
 |---|---|
 | Streamlit UI | `http://127.0.0.1:8501` |
 | API платформы | `http://127.0.0.1:8000/docs` |
+| Mock ERP Swagger | `http://127.0.0.1:8100/docs` |
+| Mock ERP OpenAPI | `http://127.0.0.1:8100/openapi.json` |
+| Mock ERP OData service | `http://127.0.0.1:8100/sap/opu/odata4/sap/zai_service/0001/` |
+| Mock ERP OData metadata | `http://127.0.0.1:8100/sap/opu/odata4/sap/zai_service/0001/$metadata` |
 | Языковая модель | `http://127.0.0.1:8001/v1` |
 | Обработка изображений | `http://127.0.0.1:8002/v1` |
 | Векторные представления | `http://127.0.0.1:8003/v1` |
 | Qdrant | `http://127.0.0.1:6333/dashboard` |
 | Langfuse | `http://127.0.0.1:3000` |
 | Grafana | `http://127.0.0.1:3001` |
+
+Swagger/OpenAPI публикуется FastAPI-сервисом mock ERP и служит для технической проверки REST
+endpoints. Рабочая интеграция платформы проходит через `ErpPort → SapODataAdapter → ZAI_SERVICE`;
+её canonical contract задают OData service document и `$metadata`. Это custom SAP-like OData
+V4-like subset, а не released SAP standard API. Swagger UI открывается через защищённый сетевой периметр
+и SSH-туннель без отдельного application login, но вызовы защищённых методов требуют служебный
+токен и authorization context, описанные в [mock-erp/README.md](mock-erp/README.md#swagger--openapi).
 
 ### Управление отдельными частями стека
 

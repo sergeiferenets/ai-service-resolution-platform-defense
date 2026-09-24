@@ -8,6 +8,35 @@
 FastAPI и PostgreSQL. База `mock_erp` — отдельная, на том же сервере, что и база платформы:
 мок изображает внешнюю систему.
 
+## Swagger / OpenAPI
+
+FastAPI автоматически публикует вспомогательный developer interface mock ERP:
+
+| Представление | Путь | Адрес через SSH-туннель |
+|---|---|---|
+| Swagger UI | `/docs` | `http://127.0.0.1:8100/docs` |
+| OpenAPI JSON | `/openapi.json` | `http://127.0.0.1:8100/openapi.json` |
+| ReDoc | `/redoc` | `http://127.0.0.1:8100/redoc` |
+
+Swagger показывает legacy-compatible REST endpoints `/v1` и удобен для технической проверки мока.
+Основной runtime платформы `/v1` не использует: рабочий путь —
+`Application → ErpPort → SapODataAdapter → custom ZAI_SERVICE`. Canonical contract этой интеграции
+задают OData service document `/sap/opu/odata4/sap/zai_service/0001/` и XML CSDL
+`/sap/opu/odata4/sap/zai_service/0001/$metadata`. Это custom SAP-like OData V4-like subset,
+а не released SAP standard API.
+
+Само открытие Swagger UI не требует отдельного application username/password: доступ к порту
+защищён сетевым периметром и SSH-туннелем. Вызовы защищённых `/v1` и OData методов требуют
+`Authorization: Bearer <mock_erp_token>`, `X-Auth-User` и `X-Auth-Territories`; переданный контекст
+дополнительно проверяется server-side. Реальное значение токена хранится в
+`infra/secrets/mock_erp_token` и в Git не попадает.
+
+Для создания OData-черновика дополнительно используется CSRF flow:
+
+1. Выполнить `GET` service document с `X-CSRF-Token: Fetch`.
+2. Передать полученный `X-CSRF-Token` при `POST /WorkOrderDrafts`.
+3. Передать стабильный `Idempotency-Key`.
+
 ## Рабочий OData-контракт
 
 Базовый URL: `/sap/opu/odata4/sap/zai_service/0001/`, конфигурация backend — `ERP_BASE_URL`.
