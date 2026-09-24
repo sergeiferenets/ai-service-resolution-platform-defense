@@ -70,9 +70,9 @@ MVP размещается на одном арендованном узле с 
 
 ## 7. Наблюдаемость
 
-- **Аудиторский след** ведётся в PostgreSQL профиля `core` по модели данных и от наблюдаемости не зависит.
-- **Трассировка вызовов модели** — Langfuse, инструмент разработчика; источником доказательств он не является.
-- **Метрики** собирает Prometheus — с экземпляров vLLM, Qdrant и API; Grafana их отображает.
+- **Operational/audit trace** ведётся в PostgreSQL профиля `core` через `PROCESS_STEP`, `TOOL_CALL` и `AUDIT_EVENT` и от observability profile не зависит.
+- **Langfuse** входит в observability profile как инструмент разработчика, но приложение не отправляет в него LLM traces.
+- **Метрики**: Prometheus настроен для экземпляров vLLM, Qdrant и самого Prometheus. Endpoint `/metrics` у API не реализован; node metrics и готовые project-specific Grafana dashboards отсутствуют.
 
 Распределённая трассировка через отдельный сборщик отнесена к целевому состоянию: при одном узле и одном процессе приложения выигрыш не оправдывает дополнительной службы (`technology-decisions.md`, раздел 7).
 

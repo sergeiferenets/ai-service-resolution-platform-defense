@@ -143,8 +143,8 @@ workspace "Мультиагентная AI-платформа анализа и 
             }
 
             observability = container "Наблюдаемость" {
-                description "Prometheus/Grafana и Langfuse развёрнуты; сквозная OpenTelemetry/LLM-трассировка приложения — target"
-                technology "OpenTelemetry, Langfuse, Prometheus, Grafana"
+                description "Observability profile: Prometheus, Grafana, Langfuse. Application-level OTel/LLM tracing и application metrics — target/partial"
+                technology "Langfuse, Prometheus, Grafana; OpenTelemetry — target"
             }
         }
 
@@ -173,7 +173,7 @@ workspace "Мультиагентная AI-платформа анализа и 
         platform.api -> platform.inference "Запрашивает рассуждение и распознавание" "OpenAI-совместимый API"
         platform.api -> platform.adapter "Получает факты, создаёт документы"
         platform.api -> platform.stateDb "Сохраняет состояние, согласования, аудит"
-        platform.api -> platform.observability "Трассировка и метрики"
+        platform.api -> platform.observability "Target: LLM tracing и application metrics"
 
         platform.retrieval -> platform.vectorDb "Гибридный запрос с фильтром по правам"
         platform.retrieval -> platform.inference "Векторное представление запроса"

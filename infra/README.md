@@ -39,10 +39,12 @@ RTX 4090 относится к архитектуре Ada Lovelace (sm_89), ус
 `bootstrap.sh` поднимает `core`, дожидается готовности, затем запускает `observability` в фоне.
 Недоступность наблюдаемости не задерживает готовность стека и не роняет развёртывание.
 
-**Langfuse — инструмент разработчика, а не система аудита.** Аудиторский след платформы ведётся
-в PostgreSQL профиля `core` по схеме `docs/architecture/data-model.md` (сущность `AUDIT_EVENT`).
-Ни один сервис профилей `core` и `app` не ссылается на Langfuse: приложение обязано работать при
-его недоступности.
+Профиль разворачивает инфраструктурные компоненты observability. **Langfuse — инструмент
+разработчика, а не система аудита:** приложение не отправляет в него LLM traces. Фактический trace
+платформы ведётся в PostgreSQL профиля `core` через `PROCESS_STEP`, `TOOL_CALL` и `AUDIT_EVENT`.
+Prometheus настроен для vLLM, Qdrant и собственных метрик; endpoint `/metrics` у backend отсутствует,
+node metrics и готовые project-specific Grafana dashboards в baseline не входят. Ни один сервис
+профилей `core` и `app` не зависит от Langfuse: приложение работает при его недоступности.
 
 ```bash
 docker compose -f infra/docker-compose.yml --profile core ps
