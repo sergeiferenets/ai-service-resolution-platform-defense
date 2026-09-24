@@ -23,7 +23,10 @@ CTX = AuthContext("U-002", "Диспетчер", frozenset({"TER-SPB"}))
 CATALOG = load_catalog()
 ENGINE = RuleEngine(CATALOG)
 HP_MODEL = "HP LaserJet Pro M4103dw"
-SYMPTOM = "после обновления прошивки печать останавливается, ошибка повторяется без сети"
+POSITIVE_SYMPTOM = ("Ошибка появляется после отправки конкретного PDF. После очистки очереди и запуска "
+                    "без USB/LAN ошибка не возникает.")
+NEGATIVE_SYMPTOM = "Ошибка появляется сразу после включения и повторяется даже при отключённых USB и LAN."
+INSUFFICIENT_SYMPTOM = "На дисплее ошибка 49.4C.02, печать остановилась."
 
 
 def outcome_for(error_code: str, manufacturer: str = "HP"):
@@ -32,7 +35,7 @@ def outcome_for(error_code: str, manufacturer: str = "HP"):
                                  model_id={"HP": "MOD-003", "Canon": "MOD-004"}[manufacturer]))
 
 
-def case_for(error_code: str = "49.4C.02", manufacturer: str = "HP", symptom: str | None = SYMPTOM,
+def case_for(error_code: str = "49.4C.02", manufacturer: str = "HP", symptom: str | None = POSITIVE_SYMPTOM,
              rule_id: str | None = None, condition: str | None = None) -> PolicyCase:
     outcome = outcome_for(error_code, manufacturer)
     rule = outcome.rule
@@ -46,8 +49,9 @@ def tools() -> tuple[PolicyTools, list]:
     return PolicyTools(record=lambda *a: calls.append(a), redact=lambda s: s), calls
 
 
-def reply(result="applicable", reason="Код 49.4C.02 относится к ошибке прошивки, как в условии правила.",
-          evidence=("rule_condition", "error_code")) -> str:
+def reply(result="applicable",
+          reason="Связь с конкретным заданием и отсутствие автономного воспроизведения подтверждают условие.",
+          evidence=("rule_condition", "symptom")) -> str:
     return json.dumps({"result": result, "reason": reason, "evidence": list(evidence)}, ensure_ascii=False)
 
 
@@ -64,7 +68,7 @@ def agent(*answers, catalog=CATALOG, error=None) -> LlmPolicyAgent:
     return LlmPolicyAgent(client, catalog)
 
 
-def evaluate(policy: LlmPolicyAgent, error_code: str = "49.4C.02", symptom: str | None = SYMPTOM,
+def evaluate(policy: LlmPolicyAgent, error_code: str = "49.4C.02", symptom: str | None = POSITIVE_SYMPTOM,
              manufacturer: str = "HP", case: PolicyCase | None = None):
     tool, calls = tools()
     verdict = policy.evaluate(CTX, case or case_for(error_code, manufacturer, symptom), tools=tool)
@@ -83,27 +87,28 @@ def test_evaluative_rule_is_the_one_being_evaluated():
 
 def test_applicable_rule_is_confirmed():
     verdict, calls, _ = evaluate(agent(reply()))
-    assert verdict.result == "applicable" and verdict.evidence == ("rule_condition", "error_code")
+    assert verdict.result == "applicable" and verdict.evidence == ("rule_condition", "symptom")
     assert verdict.stub is False
     assert [c[0] for c in calls] == ["llm.policy"] and calls[0][4] == "успех"
 
 
 def test_not_applicable_rule_is_reported():
-    answer = reply("not_applicable", "Код относится к другой неисправности, чем описано в условии.",
+    answer = reply("not_applicable", "Ошибка повторяется при отключённых USB и LAN, что противоречит условию.",
                    ("rule_condition", "symptom"))
-    verdict, _, _ = evaluate(agent(answer))
+    verdict, _, _ = evaluate(agent(answer), symptom=NEGATIVE_SYMPTOM)
     assert verdict.result == "not_applicable" and verdict.reason
 
 
 def test_missing_features_end_in_insufficient():
     answer = reply("insufficient", "Признаков, по которым проверяется условие, в фактах нет.", ())
-    verdict, _, _ = evaluate(agent(answer))
+    verdict, _, _ = evaluate(agent(answer), symptom=INSUFFICIENT_SYMPTOM)
     assert verdict.result == "insufficient"
 
 
-def test_contradictory_features_end_in_insufficient():
-    answer = reply("insufficient", "Описание неисправности противоречит коду ошибки.", ("error_code", "symptom"))
-    verdict, _, _ = evaluate(agent(answer))
+def test_error_code_alone_is_not_demonstrated_as_sufficient_for_applicability():
+    answer = reply("insufficient", "Код указан, но диагностических признаков для проверки условия нет.",
+                   ("rule_condition", "error_code", "symptom"))
+    verdict, _, _ = evaluate(agent(answer), symptom=INSUFFICIENT_SYMPTOM)
     assert verdict.result == "insufficient"
 
 
@@ -140,9 +145,10 @@ def test_code_quoted_from_the_rule_condition_is_allowed():
     """Условие правила записано шаблоном кода: цитата из переданного факта
     новым фактом не является."""
     assert "49.xx.yy" in CATALOG.rules["R-06"].condition_text
-    answer = reply(reason="Условие правила про 49.xx.yy выполняется: код обращения относится к этому семейству.")
+    answer = reply("insufficient", "Код 49.xx.yy указан, но диагностических признаков недостаточно.",
+                   ("rule_condition", "error_code"))
     verdict, calls, _ = evaluate(agent(answer))
-    assert verdict.result == "applicable" and len(calls) == 1
+    assert verdict.result == "insufficient" and len(calls) == 1
 
 
 @pytest.mark.parametrize("reason", [
@@ -252,16 +258,11 @@ def test_audit_formulations_are_corrected_on_retry(reason):
 
 
 @pytest.mark.parametrize("reason", [
-    "Код 49.4C.02 из обращения относится к семейству, описанному в условии.",
-    "Условие правила про 49.xx.yy выполняется.",
-    "Правило R-06 применимо: производитель и код совпадают с условием.",
-    "HP LaserJet Pro M4103dw показывает код, описанный в условии правила.",
-    "79 Service Error также перечислен в условии правила.",
-    "Двух признаков достаточно: производитель и код ошибки.",
-    "Задание печати не обрабатывается — это соответствует условию.",
+    "Ошибка связана с конкретным заданием и без USB/LAN не воспроизводится.",
+    "После очистки очереди и запуска без USB/LAN ошибка не возникает.",
+    "Конкретный PDF вызывает ошибку, автономно она не повторяется.",
 ])
 def test_legitimate_reasons_are_not_refused(reason):
-    """Ужесточение не должно отсекать обычные формулировки: значения из
-    фактов, шаблон кода из условия и счётные числа остаются допустимыми."""
+    """Обычное техническое обоснование по диагностическим фактам допустимо."""
     verdict, calls, _ = evaluate(agent(reply(reason=reason)))
     assert verdict.result == "applicable" and len(calls) == 1

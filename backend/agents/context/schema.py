@@ -24,7 +24,10 @@ class TextExtraction(BaseModel):
     serial_number: str | None = Field(max_length=40)
     model_designation: str | None = Field(max_length=80)
     error_code: str | None = Field(max_length=60)
-    symptom_text: str | None = Field(max_length=400, description="Дословный фрагмент с описанием неисправности")
+    symptom_text: str | None = Field(
+        max_length=400,
+        description="Непрерывный дословный фрагмент со всеми указанными диагностическими признаками",
+    )
     circumstances: list[Circumstance] = Field(max_length=4)
 
 

@@ -92,6 +92,14 @@ def test_serial_in_text_found_is_confirmed_and_code_checked():
     assert [(t, o) for t, o, _ in calls] == [("llm.context", "успех")]
 
 
+def test_diagnostic_symptom_is_preserved_for_policy_evaluation():
+    symptom = ("Ошибка появляется после отправки конкретного PDF. После очистки очереди и запуска "
+               "без USB/LAN ошибка не возникает.")
+    text = f"HP LaserJet Pro M4103dw, серийный HPL-M4103-77842: ошибка 49.4C.02. {symptom}"
+    result, _ = run(text, answer("HPL-M4103-77842", "HP LaserJet Pro M4103dw", "49.4C.02", symptom))
+    assert result.extraction.symptom_text == symptom
+
+
 def test_serial_with_typo_is_stated_with_discrepancy():
     text = "Принтер HP, s/n HPL-M4103-77843, ошибка 50.2"
     result, _ = run(text, answer("HPL-M4103-77843", code="50.2"))

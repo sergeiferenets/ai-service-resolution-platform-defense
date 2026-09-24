@@ -134,7 +134,7 @@ def test_4_process_steps_restore_sequence_with_artifact_version(api, reference):
     version = all_steps[0]["artifact_version"]
     assert version["llm_model_revision"] == os.environ["LLM_MODEL_REVISION"]
     assert version["vision_model_revision"] == os.environ["VISION_MODEL_REVISION"]
-    assert version["prompt_version"].startswith("context:context-2-")
+    assert version["prompt_version"].startswith("context:context-3-")
     assert "knowledge:knowledge-" in version["prompt_version"]        # агент настоящий
     assert "policy:policy-" in version["prompt_version"]             # третий агент настоящий
     assert version["rules_version"].startswith("rules-")
@@ -200,7 +200,7 @@ def test_11_model_calls_are_recorded_with_duration(api, reference):
     calls = [c for s in steps(api, reference[0]["request_id"], "U-002") for c in s["tool_calls"]
              if c["tool_name"].startswith("llm.")]
     assert calls and all(c["duration_ms"] > 0 for c in calls)
-    assert calls[0]["request_payload"]["prompt_version"].startswith("context-2-")
+    assert calls[0]["request_payload"]["prompt_version"].startswith("context-3-")
 
 
 def test_12_nameplate_photo_is_recognized(api):
@@ -331,11 +331,11 @@ def test_20_revoked_territory_closes_a_previously_visible_request(api, reference
 # --- оценочное правило и Policy Agent (живой) -------------------------------------------------------------
 
 def test_21_evaluative_rule_is_decided_by_the_policy_agent(api):
-    """Обращение с кодом HP 49.xx попадает на правило R-06, размеченное как
-    требующее оценки. Решение принимает настоящий Policy Agent, а способ
-    выполнения работ остаётся из свода правил."""
-    body = submit(api, "U-002", "HP LaserJet Pro M4103dw, серийный HPL-M4103-77842: ошибка 49.4C.02, "
-                                "задание печати не обрабатывается")
+    """Rule Engine выбирает candidate R-06 по model+code, а настоящий
+    Policy Agent подтверждает remote condition по диагностическому symptom."""
+    body = submit(api, "U-002", "HP LaserJet Pro M4103dw, серийный HPL-M4103-77842: ошибка 49.4C.02. "
+                                "Ошибка появляется после отправки конкретного PDF. После очистки очереди и запуска "
+                                "без USB/LAN ошибка не возникает.")
     request_id = body["request_id"]
     all_steps = steps(api, request_id, "U-002")
     names = [s["step_name"] for s in all_steps]
@@ -350,17 +350,39 @@ def test_21_evaluative_rule_is_decided_by_the_policy_agent(api):
     assert snapshot["agent"] == "LlmPolicyAgent" and snapshot["stub"] is False
     assert verdict["result"] == "applicable", verdict
     assert set(verdict["evidence"]) <= {"rule_condition", "manufacturer", "error_code", "model", "symptom"}
-    assert {"rule_condition", "error_code"} & set(verdict["evidence"]), verdict
+    assert {"rule_condition", "symptom"} & set(verdict["evidence"]), verdict
     assert "route" not in verdict and "warranty" not in verdict      # решений платформы агент не выносит
 
     calls = [c["tool_name"] for c in policy["tool_calls"]]
     assert calls and set(calls) == {"llm.policy"} and len(calls) <= 2   # вызов и, при отказе, повтор
     sent = policy["tool_calls"][0]["request_payload"]["user"]
     assert "HPL-M4103-77842" not in sent and "договор" not in sent.lower()   # вход агента минимальный
+    assert "конкретного PDF" in sent and "без USB/LAN ошибка не возникает" in sent
 
     # Способ выполнения работ — из свода правил, не от агента.
     assert body["status"] == "ОжиданиеПодтверждения", body["status_reason"]
     recommendation = body["recommendation"]
     assert recommendation["rule_id"] == "R-06" and recommendation["execution_mode"] == "remote"
+    assert recommendation["fulfillment_type"] == "internal"
+    assert recommendation["service_center_id"] is None and recommendation["technician_id"] is None
     assert recommendation["hypothesis"] and recommendation["sources"]
     assert names[-1] == "recommendation" and "create_draft" not in names
+
+    done = confirm(api, request_id)
+    assert done["status"] == "ЧерновикСоздан"
+    assert done["draft"]["external_document_id"].startswith("WO-")
+    completed_names = [s["step_name"] for s in steps(api, request_id, "U-002")]
+    assert completed_names[-2:] == ["confirmation", "create_draft"]
+
+
+def test_22_r06_autonomous_failure_is_escalated_without_draft(api):
+    body = submit(api, "U-002", "HP LaserJet Pro M4103dw, серийный HPL-M4103-77842: ошибка 49.4C.02. "
+                                "Ошибка появляется сразу после включения и повторяется даже при отключённых USB и LAN.")
+    all_steps = steps(api, body["request_id"], "U-002")
+    rules = next(s["state_snapshot"]["output"] for s in all_steps if s["step_name"] == "rules")
+    policy = next(s["state_snapshot"]["output"] for s in all_steps if s["step_name"] == "policy")
+
+    assert (rules["rule_id"], rules["kind"]) == ("R-06", "needs_evaluation")
+    assert policy["result"] == "not_applicable", policy
+    assert body["status"] == "Эскалировано" and body["recommendation"] is None and body["draft"] is None
+    assert "create_draft" not in [s["step_name"] for s in all_steps]

@@ -80,6 +80,16 @@ def test_requires_evaluation_goes_to_policy(engine):
     assert (out.kind, out.rule.rule_id) == ("needs_evaluation", "R-07")
 
 
+@pytest.mark.parametrize("symptom", [
+    "Ошибка появляется после отправки конкретного PDF. После запуска без USB/LAN ошибка не возникает.",
+    "Ошибка появляется сразу после включения и повторяется даже при отключённых USB и LAN.",
+    "На дисплее ошибка 49.4C.02, печать остановилась.",
+])
+def test_r06_candidate_depends_on_model_and_code_not_diagnostic_text(engine, symptom):
+    out = engine.evaluate(Facts("HP", "49.4C.02", text=symptom, model_id="MOD-003"))
+    assert (out.kind, out.level, out.rule.rule_id) == ("needs_evaluation", 2, "R-06")
+
+
 def test_code_of_other_manufacturer_does_not_match(engine):
     # Ложное сопоставление: код Kyocera на аппарате HP.
     assert engine.evaluate(Facts("HP", "C6000", model_id="MOD-003")).kind == "human"
