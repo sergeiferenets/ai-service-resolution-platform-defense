@@ -1,0 +1,177 @@
+# Машиночитаемая часть свода правил решения.
+#
+# Дословные поля — условие, решение, urgency_hint, предписанные действия,
+# источник — берутся из 04_decision_rules.csv и здесь не повторяются: один
+# источник текста, никакого переписывания (ADR-0004, раздел 5).
+#
+# Здесь только то, чего в справочнике нет в исполнимом виде:
+#   category        — по ADR-0004 (редакция 2); для R-01…R-10 разметка ADR
+#                     первична и перекрывает колонку справочника;
+#   required_skill  — компетенция исполнителя при выезде или мастерской;
+#   triggers        — условия срабатывания с уровнем по ADR-0004, раздел 4:
+#                     safety     — признаки опасности (уровень 1);
+#                     model_code — конкретная модель и код (уровень 2);
+#                     symptom    — общий симптом (уровень 4).
+#
+# Любое изменение файла меняет rules_version набора артефактов
+# (data-model.md, ARTIFACT_VERSION).
+
+version: 1
+
+# Метки симптомов, которые движок принимает на вход. Извлечение меток из
+# текста обращения — задача агентов; движок работает только с метками.
+symptom_tags:
+  danger: признаки опасности — дым, гарь, искрение, жидкость внутри, вздутая батарея
+  no_warmup: аппарат не прогревается
+  paper_jam_single: разовое замятие, лист виден и доступен без разборки
+  paper_jam_repeated: замятие повторяется в одной зоне
+  toner_message: сообщение о тонере или картридж не распознан
+  scan_send_failure: не отправляется скан по e-mail или в сетевую папку
+  maintenance_kit: сообщение о замене сервисного комплекта
+  print_defects: полосы, фон, бледная печать без блокировки печати
+  scanner_jam_single: разовое замятие или захват двух листов сканером
+  scanner_jam_repeated: замятие или мультиподача повторяются на чистой пачке
+  scanner_sensor_message: устойчивое сообщение Jam, Multifeed или Sensor
+  scan_lines: полосы, пятна или фон на сканах при исправном оригинале
+  scanner_lamp_motor_adf_failure: не запускаются лампа, двигатель или автоподатчик
+
+# Предохранитель безопасности (security.md, раздел 3.3) работает правилом
+# по исходному тексту, до вызова агентов. Сравнение — по подстроке без учёта
+# регистра.
+safety_keywords:
+  - дым
+  - задымл
+  - гарь
+  - горел
+  - запах горелого
+  - искр
+  # У трёх слов указан признак риска по гарантии (PRD 5.10): предохранитель
+  # ставит его вместе с эскалацией. Отдельного словаря для признака нет.
+  - {keyword: жидкост, warranty_risk: жидкость}
+  - {keyword: залит, warranty_risk: жидкость}
+  - {keyword: протечк, warranty_risk: жидкость}
+  - вздут
+  - оплав
+  - возгоран
+  - огонь
+
+# Префиксы, которые отбрасываются при сравнении кода из обращения с кодом
+# правила: «Call service C6000» и «C6000» — один код.
+code_prefixes_ignored:
+  - Call service
+  - Internal Error
+
+rules:
+  - id: R-01
+    category: safety
+    triggers:
+      - {level: safety, symptom: danger}
+
+  - id: R-02
+    category: deterministic
+    required_skill: SK-03
+    triggers:
+      - {level: model_code, manufacturer: HP, model_ids: [MOD-003], code_pattern: '^50\.[0-9A-Za-z]+$'}
+      - {level: model_code, manufacturer: Kyocera, model_ids: [MOD-002, MOD-005], code_pattern: '^C6000$'}
+      - {level: model_code, manufacturer: Pantum, model_ids: [MOD-001], code_range: [3, 12]}
+      - {level: symptom, symptom: no_warmup}
+
+  - id: R-03
+    category: deterministic
+    triggers:
+      - {level: symptom, symptom: paper_jam_single}
+
+  - id: R-04
+    category: deterministic
+    required_skill: SK-02
+    triggers:
+      - {level: symptom, symptom: paper_jam_repeated}
+
+  - id: R-05
+    category: deterministic
+    required_skill: SK-02
+    triggers:
+      - {level: symptom, symptom: toner_message}
+
+  - id: R-06
+    category: requires_evaluation
+    required_skill: SK-03
+    triggers:
+      - {level: model_code, manufacturer: HP, model_ids: [MOD-003], code_pattern: '^49\.[0-9A-Za-z]{2}(\.[0-9A-Za-z]{2})?$'}
+      - {level: model_code, manufacturer: HP, model_ids: [MOD-003], code_pattern: '^79( Service Error)?$'}
+
+  # В справочнике R-07 размечено как детерминированное. ADR-0004 (редакция 2)
+  # переводит его в требующие оценки: код известен, но ветвь зависит от
+  # состояния сети и параметров доступа. ADR первичен.
+  - id: R-07
+    category: requires_evaluation
+    required_skill: SK-12
+    triggers:
+      - {level: model_code, manufacturer: Canon, model_ids: [MOD-004], code_pattern: '^#(801|802|806|839)$'}
+      - {level: symptom, symptom: scan_send_failure}
+
+  - id: R-08
+    category: deterministic
+    required_skill: SK-02
+    triggers:
+      - {level: model_code, manufacturer: Kyocera, model_ids: [MOD-002, MOD-005], code_pattern: '^(Replace )?(MK|Maintenance Kit)$'}
+      - {level: symptom, symptom: maintenance_kit}
+
+  # Коды Pantum 11 и 12 входят и в диапазон R-02 (03–12), и в диапазон R-09
+  # (11–13): так в справочнике. Это равноправные кандидаты одного уровня —
+  # по ADR-0004 они ведут к уточнению, а не к выбору одного из них.
+  - id: R-09
+    category: requires_evaluation
+    required_skill: SK-02
+    triggers:
+      - {level: model_code, manufacturer: Pantum, model_ids: [MOD-001], code_range: [11, 13]}
+      - {level: model_code, manufacturer: Kyocera, model_ids: [MOD-002], code_pattern: '^C3100$'}
+
+  - id: R-10
+    category: requires_evaluation
+    required_skill: SK-02
+    triggers:
+      - {level: symptom, symptom: print_defects}
+
+  - id: R-36
+    category: deterministic
+    triggers:
+      - {level: symptom, symptom: scanner_jam_single}
+
+  - id: R-37
+    category: deterministic
+    required_skill: SK-10
+    triggers:
+      - {level: symptom, symptom: scanner_jam_repeated}
+
+  - id: R-38
+    category: deterministic
+    required_skill: SK-10
+    triggers:
+      - {level: model_code, manufacturer: Avision, model_ids: [MOD-016], code_pattern: '^(2013|2014|3101|3205)$'}
+      - {level: symptom, symptom: scanner_sensor_message}
+
+  - id: R-39
+    category: deterministic
+    triggers:
+      - {level: symptom, symptom: scan_lines}
+
+  - id: R-40
+    category: deterministic
+    required_skill: SK-10
+    triggers:
+      - {level: model_code, manufacturer: Avision, model_ids: [MOD-016], code_pattern: '^(2024|3003|2037|3006)$'}
+      - {level: symptom, symptom: scanner_lamp_motor_adf_failure}
+
+# Гарантийный срок по правилу W-01 (05_warranty_rules.csv), месяцев от даты
+# продажи. Предварительная квалификация выполняется только по этому правилу:
+# остальные правила гарантии определяет инженер при диагностике (PRD, 5.5).
+warranty_months_by_type:
+  МФУ лазерное (А4): 12
+  Принтер лазерный (А4): 12
+  Ноутбук: 12
+  Система видеоконференцсвязи (ВКС): 12
+  Сканер поточный (профессиональный): 24
+  Сканер сетевой (профессиональный): 24
+  Сервер (стоечный): 36
+  Интерактивная панель: 36

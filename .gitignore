@@ -1,0 +1,45 @@
+# Секреты и локальная конфигурация
+infra/.env
+*.env
+!infra/.env.example
+# Файлы секретов, создаются bootstrap.sh (docs/security/security.md, раздел 5)
+infra/secrets/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Логи и временные файлы
+*.log
+.pytest_cache/
+
+# Веса моделей и локальные тома (см. infra/docker-compose.yml)
+models/
+infra/volumes/
+*.safetensors
+*.gguf
+
+# Локальные переопределения конфигураций
+infra/configs/*.local.*
+infra/docker-compose.override.yml
+
+# Состояние bootstrap
+infra/.bootstrap-state
+
+# Справочники проекта коммитятся. Правило перекрывает локальные исключения
+# папки reference/ (исходные документы в корне рабочей копии): под
+# неякорный шаблон «reference/» попадает и data/reference/.
+!data/reference/

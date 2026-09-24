@@ -1,0 +1,628 @@
+# =============================================================================
+# Стек MVP. Разворачивается только через infra/bootstrap.sh.
+#
+# Профили (docker compose --profile <имя> up -d):
+#
+#   core           инференс и хранилища. Без них система не работает.
+#   app            backend, мок учётной системы, интерфейс оператора.
+#                  Включается после появления Dockerfile в backend/ и mock-erp/.
+#   observability  Langfuse, Prometheus, Grafana. Инструменты разработчика.
+#                  Недоступность профиля не влияет на работу core и app.
+#
+# Аудиторский след платформы ведётся в PostgreSQL профиля core по схеме
+# docs/architecture/data-model.md. Langfuse — отдельная база и отдельный
+# жизненный цикл: приложение от него не зависит.
+#
+# Все порты публикуются на 127.0.0.1. Сервер арендованный и имеет публичный
+# адрес; ADR-0001 требует закрытого периметра, поэтому наружу не выставляется
+# ничего. Доступ к интерфейсам — через SSH-туннель, см. infra/README.md.
+#
+# Веса моделей лежат на хосте в ${MODELS_DIR} и монтируются внутрь. В образах
+# весов нет: сервер прерываемый, повторное скачивание 15 ГБ на каждом
+# пересоздании контейнера недопустимо.
+#
+# Секреты — Docker secrets из infra/secrets/, внутри контейнера
+# /run/secrets/<имя> (docs/security/security.md, раздел 5). В infra/.env
+# только несекретная конфигурация. Образы, читающие секрет из файла,
+# получают путь в *_FILE; для остальных секрет переводит в переменную
+# окружения процесса обёртка configs/secrets-entrypoint.sh.
+# =============================================================================
+
+x-vllm-common: &vllm-common
+  image: ${VLLM_IMAGE}
+  restart: unless-stopped
+  # ПРОВЕРИТЬ НА МАШИНЕ: доступ к GPU. Форма deploy.resources работает
+  # с docker compose v2 и NVIDIA Container Toolkit. Если на машине окажется
+  # старый compose, эквивалент — runtime: nvidia + NVIDIA_VISIBLE_DEVICES=all.
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  # vLLM использует разделяемую память для обмена между процессами загрузчика.
+  # Значение по умолчанию (64 МБ) приводит к падению при старте.
+  shm_size: "8gb"
+  # vLLM не читает ключ из файла: обёртка переводит секрет vllm_api_key
+  # в переменную VLLM_API_KEY процесса. Поэтому точка входа образа
+  # переопределена, а исходная команда задана в command каждого экземпляра.
+  entrypoint: ["/bin/sh", "/usr/local/bin/secrets-entrypoint.sh"]
+  secrets: [vllm_api_key]
+  volumes:
+    - ${MODELS_DIR}:/models
+    - ./configs/secrets-entrypoint.sh:/usr/local/bin/secrets-entrypoint.sh:ro
+  environment:
+    SECRETS_TO_ENV: VLLM_API_KEY=vllm_api_key
+    HF_HOME: /models/hf
+    # Токен Hugging Face в контейнеры не передаётся: веса открытые
+    # и загружаются bootstrap.sh до старта стека.
+    # Пустое значение huggingface_hub принимает за адрес без схемы, поэтому
+    # при пустом HF_ENDPOINT в .env подставляется официальный адрес.
+    HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+    # Телеметрия vLLM отключена: ADR-0001, исходящих соединений быть не должно.
+    VLLM_NO_USAGE_STATS: "1"
+    DO_NOT_TRACK: "1"
+    TZ: ${TZ}
+  # Проверка через python3, а не curl: curl в образе vllm-openai не гарантирован.
+  # Команды python в образе нет, только python3 (проверено на машине, v0.9.2).
+  healthcheck:
+    test:
+      - CMD
+      - python3
+      - -c
+      - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+    interval: 15s
+    timeout: 10s
+    retries: 60
+    # Первый запуск включает скачивание весов. 15 минут — с запасом.
+    start_period: 900s
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+
+  # ===========================================================================
+  # core — инференс
+  # ===========================================================================
+
+  # Языковая модель трёх агентов. ADR-0005, workspace.dsl.
+  vllm-llm:
+    <<: [*vllm-common, *logging]
+    container_name: vllm-llm
+    profiles: [core]
+    ports:
+      - "127.0.0.1:${LLM_PORT}:8000"
+    command:
+      # Исходная команда образа: сервер OpenAI-совместимого API. Ключ он
+      # берёт из переменной VLLM_API_KEY, поэтому --api-key не передаётся.
+      # Проверено на машине (v0.9.2, 14.09.2026): точка входа образа именно эта,
+      # ключ читается из VLLM_API_KEY; без ключа сервер отвечает 401.
+      - python3
+      - -m
+      - vllm.entrypoints.openai.api_server
+      - --model=${LLM_MODEL_ID}
+      - --revision=${LLM_MODEL_REVISION:?Set LLM_MODEL_REVISION}
+      - --tokenizer-revision=${LLM_MODEL_REVISION:?Set LLM_MODEL_REVISION}
+      - --served-model-name=${LLM_SERVED_NAME}
+      # awq_marlin — ядра для Ampere и новее. RTX 6000 Ada = sm_89, подходит.
+      # ADR-0005 называет это ограничение жёстким.
+      - --quantization=awq_marlin
+      - --dtype=float16
+      - --max-model-len=${LLM_MAX_MODEL_LEN}
+      - --gpu-memory-utilization=${LLM_GPU_FRACTION}
+      # Ограничение параллелизма: три агента идут последовательно,
+      # большая очередь только отъедает KV-кэш у соседних моделей.
+      - --max-num-seqs=16
+      # Вызов инструментов нужен Context Agent и Policy Agent (ADR-0002).
+      - --enable-auto-tool-choice
+      - --tool-call-parser=hermes
+      - --port=8000
+      - --host=0.0.0.0
+    # ВАЖНО ДЛЯ ПРИЛОЖЕНИЯ, не для compose: у Qwen3 режим размышления включён
+    # по умолчанию и выдаёт блок <think>. При трёх последовательных агентах
+    # это ломает целевое время ответа и разбор структурированного вывода.
+    # Каждый запрос обязан содержать:
+    #   "chat_template_kwargs": {"enable_thinking": false}
+    # Зафиксировать в клиенте инференса, а не полагаться на умолчание.
+
+  # Модель обработки изображений: только идентификационная табличка.
+  # Границы применения — docs/architecture/model-card.md, раздел 3.
+  vllm-vision:
+    <<: [*vllm-common, *logging]
+    container_name: vllm-vision
+    profiles: [core]
+    ports:
+      - "127.0.0.1:${VISION_PORT}:8000"
+    command:
+      # Исходная команда образа — см. vllm-llm.
+      - python3
+      - -m
+      - vllm.entrypoints.openai.api_server
+      - --model=${VISION_MODEL_ID}
+      - --revision=${VISION_MODEL_REVISION:?Set VISION_MODEL_REVISION}
+      - --tokenizer-revision=${VISION_MODEL_REVISION:?Set VISION_MODEL_REVISION}
+      - --served-model-name=${VISION_SERVED_NAME}
+      - --quantization=awq_marlin
+      - --dtype=float16
+      - --max-model-len=${VISION_MAX_MODEL_LEN}
+      - --gpu-memory-utilization=${VISION_GPU_FRACTION}
+      - --max-num-seqs=4
+      # ПРОВЕРИТЬ НА МАШИНЕ: в vLLM 0.9.x форма ключа — image=N.
+      # В более новых версиях он принимает JSON: --limit-mm-per-prompt '{"image":2}'.
+      # При смене тега образа сверить с справкой vllm serve --help.
+      - --limit-mm-per-prompt=image=${VISION_MAX_IMAGES}
+      - --port=8000
+      - --host=0.0.0.0
+    # Запуск строго после языковой модели. vLLM трактует
+    # --gpu-memory-utilization как долю ПОЛНОГО объёма видеопамяти и измеряет
+    # свободную память при старте. Одновременный старт двух экземпляров даёт
+    # неверный замер и переподписку.
+    depends_on:
+      vllm-llm:
+        condition: service_healthy
+
+  # Плотная ветвь гибридного поиска. ADR-0003, ADR-0005 (редакция от 08.09).
+  # Разреженная ветвь — BM25 в Qdrant, видеопамять не занимает.
+  vllm-embeddings:
+    <<: [*vllm-common, *logging]
+    container_name: vllm-embeddings
+    profiles: [core]
+    ports:
+      - "127.0.0.1:${EMBED_PORT}:8000"
+    command:
+      # Исходная команда образа — см. vllm-llm.
+      - python3
+      - -m
+      - vllm.entrypoints.openai.api_server
+      - --model=${EMBED_MODEL_ID}
+      - --revision=${EMBED_MODEL_REVISION:?Set EMBED_MODEL_REVISION}
+      - --tokenizer-revision=${EMBED_MODEL_REVISION:?Set EMBED_MODEL_REVISION}
+      - --served-model-name=${EMBED_SERVED_NAME}
+      # ПРОВЕРИТЬ НА МАШИНЕ: bge-m3 — это XLM-RoBERTa. Ключ режима встраивания
+      # назывался --task embed в 0.9.x и переименован в --runner в новых
+      # версиях. Сверить с vllm serve --help при смене тега образа.
+      - --task=embed
+      - --dtype=float16
+      - --max-model-len=${EMBED_MAX_MODEL_LEN}
+      - --gpu-memory-utilization=${EMBED_GPU_FRACTION}
+      - --port=8000
+      - --host=0.0.0.0
+    depends_on:
+      vllm-vision:
+        condition: service_healthy
+
+  # ===========================================================================
+  # core — хранилища
+  # ===========================================================================
+
+  # Состояние процесса, согласования, аудиторский след.
+  # Схема — docs/architecture/data-model.md.
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    profiles: [core]
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      TZ: ${TZ}
+      # Инициализация схемы появится вместе с миграциями backend.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets: [postgres_password]
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # Фрагменты документации: плотные векторы + разреженные BM25 в одной
+  # коллекции. Единая коллекция — требование ADR-0003: фильтр по правам
+  # применяется к запросу целиком и не может быть обойдён через одну ветвь.
+  # Схема коллекции — infra/configs/qdrant-collection.json.
+  qdrant:
+    # Нужна версия с модификатором idf для разреженных векторов (появился
+    # в 1.10) и Query API с fusion: rrf. Проверено на машине (14.09.2026):
+    # коллекция с разреженной ветвью и idf создаётся.
+    # ПРОВЕРИТЬ НА МАШИНЕ: запрос с fusion: rrf — при реализации сервиса поиска.
+    image: qdrant/qdrant:v1.12.4
+    container_name: qdrant
+    profiles: [core]
+    restart: unless-stopped
+    <<: *logging
+    # Qdrant не читает ключ из файла: обёртка переводит секрет в переменную
+    # окружения процесса, исходная команда образа задана в command.
+    # Проверено на машине (14.09.2026): ./qdrant запускается, без ключа — 401.
+    entrypoint: ["/bin/sh", "/usr/local/bin/secrets-entrypoint.sh"]
+    command: ["./qdrant"]
+    secrets: [qdrant_api_key]
+    environment:
+      SECRETS_TO_ENV: QDRANT__SERVICE__API_KEY=qdrant_api_key
+      QDRANT__TELEMETRY_DISABLED: "true"
+      QDRANT__LOG_LEVEL: INFO
+      TZ: ${TZ}
+    ports:
+      - "127.0.0.1:${QDRANT_HTTP_PORT}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+      - ./configs/secrets-entrypoint.sh:/usr/local/bin/secrets-entrypoint.sh:ro
+    # Healthcheck намеренно отсутствует: в образе qdrant нет ни curl, ни wget,
+    # ни bash, а проверка через них молча деградирует в unhealthy.
+    # Готовность Qdrant проверяет bootstrap.sh с хоста.
+
+  # ===========================================================================
+  # app — приложение
+  # ===========================================================================
+  # Профиль отделён от core: приложение собирается из исходников, а core
+  # должен подниматься и без этой сборки — критерий «vLLM отвечает на
+  # русском» от приложения не зависит. Сервисы app зависят от postgres,
+  # поэтому профиль app запускается только вместе с core:
+  # `--profile core --profile app` (bootstrap.sh, start_app).
+
+  api:
+    # Контекст — корень репозитория: образу нужны загрузчик и справочники
+    # платформы из data/. Мастер-данные учётной системы в образ не входят.
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      args:
+        # Коммит кода входит в версию набора артефактов (data-model.md).
+        CODE_COMMIT: ${CODE_COMMIT:-unknown}
+    container_name: api
+    profiles: [app]
+    restart: unless-stopped
+    <<: *logging
+    # .env — только несекретная конфигурация (security.md, раздел 5).
+    env_file: [.env]
+    secrets: [postgres_password, vllm_api_key, qdrant_api_key, mock_erp_token]
+    environment:
+      # Единственный источник рассуждения — локальный vLLM. ADR-0001.
+      LLM_BASE_URL: http://vllm-llm:8000/v1
+      VISION_BASE_URL: http://vllm-vision:8000/v1
+      EMBEDDINGS_BASE_URL: http://vllm-embeddings:8000/v1
+      QDRANT_URL: http://qdrant:6333
+      MOCK_ERP_URL: http://mock-erp:8100
+      ERP_BASE_URL: ${ERP_BASE_URL:-http://mock-erp:8100/sap/opu/odata4/sap/zai_service/0001/}
+      # Секреты собственный код читает из файлов по переменным *_FILE.
+      # Строку подключения к PostgreSQL он собирает сам: POSTGRES_HOST,
+      # POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER из .env и пароль из файла.
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      VLLM_API_KEY_FILE: /run/secrets/vllm_api_key
+      QDRANT_API_KEY_FILE: /run/secrets/qdrant_api_key
+      MOCK_ERP_TOKEN_FILE: /run/secrets/mock_erp_token
+      TZ: ${TZ}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-erp:
+        condition: service_healthy
+
+  # Демонстрационный интерфейс. Отдельный профиль: к работе платформы он не
+  # относится и на защите поднимается рядом с ней одной командой.
+  ui:
+    build:
+      context: ..
+      dockerfile: ui/Dockerfile
+    container_name: ui
+    profiles: [ui]
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      API_URL: http://api:8000
+      TZ: ${TZ}
+    ports:
+      - "127.0.0.1:${UI_PORT}:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  mock-erp:
+    # Контекст — корень репозитория: образу нужны справочники из data/.
+    build:
+      context: ..
+      dockerfile: mock-erp/Dockerfile
+    container_name: mock-erp
+    profiles: [app]
+    restart: unless-stopped
+    <<: *logging
+    env_file: [.env]
+    secrets: [postgres_password, mock_erp_token]
+    environment:
+      # Отдельная база на том же сервере: мок изображает внешнюю систему.
+      MOCK_ERP_DB: mock_erp
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      MOCK_ERP_TOKEN_FILE: /run/secrets/mock_erp_token
+      TZ: ${TZ}
+    ports:
+      - "127.0.0.1:${MOCK_ERP_PORT}:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ===========================================================================
+  # observability — инструменты разработчика
+  # ===========================================================================
+  # Собственный PostgreSQL, собственный жизненный цикл. Ни один сервис
+  # профилей core и app на них не ссылается.
+
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: langfuse-postgres
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_DB: ${LANGFUSE_POSTGRES_DB}
+      POSTGRES_USER: ${LANGFUSE_POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/langfuse_postgres_password
+      TZ: ${TZ}
+    secrets: [langfuse_postgres_password]
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_POSTGRES_USER} -d ${LANGFUSE_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      # Проверено на машине (14.09.2026): /entrypoint.sh образа 24.8 читает CLICKHOUSE_PASSWORD_FILE.
+      CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse_password
+      TZ: ${TZ}
+    secrets: [clickhouse_password]
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    # Пароль в аргументах redis-server был бы виден в списке процессов,
+    # поэтому он задан файлом конфигурации redis_conf. Файл собирает
+    # bootstrap.sh из секрета redis_password.
+    command: ["redis-server", "/run/secrets/redis_conf"]
+    secrets: [redis_conf, redis_password]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    # Реестр производителя: на Docker Hub этого тега больше нет ("pull access
+    # denied", проверено на машине 14.09.2026), на quay.io тот же релиз есть.
+    image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+    container_name: minio
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    # Точка входа образа не читает *_FILE (проверено на машине 14.09.2026):
+    # пароль переводит в переменную окружения обёртка, исходная точка входа
+    # /usr/bin/docker-entrypoint.sh вызывается из command.
+    entrypoint: ["/bin/sh", "/usr/local/bin/secrets-entrypoint.sh"]
+    # Бакет для событий Langfuse (LANGFUSE_S3_EVENT_UPLOAD_BUCKET) создаётся
+    # каталогом до старта сервера: сам Langfuse бакет не создаёт.
+    command: ["/bin/sh", "-c", "mkdir -p /data/langfuse && exec /usr/bin/docker-entrypoint.sh server /data --console-address :9001"]
+    environment:
+      SECRETS_TO_ENV: MINIO_ROOT_PASSWORD=minio_root_password
+      MINIO_ROOT_USER: minio
+      TZ: ${TZ}
+    secrets: [minio_root_password]
+    volumes:
+      - minio-data:/data
+      - ./configs/secrets-entrypoint.sh:/usr/local/bin/secrets-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse-worker
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    # Langfuse не читает секреты из файлов: обёртка переводит их в переменные
+    # окружения процесса. Строку подключения к базе точка входа Langfuse
+    # собирает из DATABASE_HOST, DATABASE_USERNAME, DATABASE_PASSWORD, DATABASE_NAME.
+    # Проверено на машине (14.09.2026): исходные точка входа и команда образа
+    # совпадают с заданными здесь, а entrypoint.sh web и worker собирает
+    # DATABASE_URL из составных переменных.
+    entrypoint: ["/bin/sh", "/usr/local/bin/secrets-entrypoint.sh"]
+    command: ["dumb-init", "--", "./worker/entrypoint.sh", "node", "worker/dist/index.js"]
+    secrets: &langfuse-secrets
+      - langfuse_postgres_password
+      - langfuse_salt
+      - langfuse_encryption_key
+      - langfuse_nextauth_secret
+      - clickhouse_password
+      - redis_password
+      - minio_root_password
+    volumes: &langfuse-volumes
+      - ./configs/secrets-entrypoint.sh:/usr/local/bin/secrets-entrypoint.sh:ro
+    environment: &langfuse-env
+      SECRETS_TO_ENV: >-
+        DATABASE_PASSWORD=langfuse_postgres_password
+        SALT=langfuse_salt
+        ENCRYPTION_KEY=langfuse_encryption_key
+        NEXTAUTH_SECRET=langfuse_nextauth_secret
+        CLICKHOUSE_PASSWORD=clickhouse_password
+        REDIS_AUTH=redis_password
+        LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio_root_password
+      DATABASE_HOST: langfuse-postgres:5432
+      DATABASE_USERNAME: ${LANGFUSE_POSTGRES_USER}
+      DATABASE_NAME: ${LANGFUSE_POSTGRES_DB}
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      # ADR-0001: исходящих соединений с узла быть не должно.
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_UPDATE_CHECK_ENABLED: "false"
+      LANGFUSE_EE_LICENSE_KEY: ""
+      TZ: ${TZ}
+    # Воркер стартует после того, как веб применил миграции базы. Иначе он не
+    # находит таблицу background_migrations и пропускает фоновые миграции до
+    # перезапуска — воспроизведено на двух свежих узлах (14.09 и 15.09.2026).
+    depends_on:
+      langfuse-web: { condition: service_healthy }
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    container_name: langfuse-web
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    # Точка входа и секреты — как у langfuse-worker, команда своя.
+    entrypoint: ["/bin/sh", "/usr/local/bin/secrets-entrypoint.sh"]
+    command: ["dumb-init", "--", "./web/entrypoint.sh", "node", "web/server.js", "--keepAliveTimeout", "110000"]
+    secrets: *langfuse-secrets
+    volumes: *langfuse-volumes
+    environment:
+      <<: *langfuse-env
+      # Сервер Next.js слушает адрес из HOSTNAME, а Docker кладёт туда имя
+      # контейнера: без 0.0.0.0 внутри контейнера сервис не отвечает на
+      # 127.0.0.1, и проверке готовности не к чему обратиться.
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "127.0.0.1:${LANGFUSE_PORT}:3000"
+    # Точка входа применяет миграции до запуска сервера: ответ health
+    # означает, что миграции применены и воркеру можно стартовать.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/public/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      langfuse-postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: prometheus
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT}:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: grafana
+    profiles: [observability]
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      TZ: ${TZ}
+    secrets: [grafana_admin_password]
+    volumes:
+      - ./configs/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT}:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  langfuse-postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+
+# Docker secrets. Файлы создаёт bootstrap.sh в infra/secrets/ (каталог 700,
+# в git не попадает); внутри контейнера секрет доступен как /run/secrets/<имя>.
+secrets:
+  vllm_api_key:               { file: ./secrets/vllm_api_key }
+  postgres_password:          { file: ./secrets/postgres_password }
+  qdrant_api_key:             { file: ./secrets/qdrant_api_key }
+  mock_erp_token:             { file: ./secrets/mock_erp_token }
+  langfuse_postgres_password: { file: ./secrets/langfuse_postgres_password }
+  langfuse_salt:              { file: ./secrets/langfuse_salt }
+  langfuse_nextauth_secret:   { file: ./secrets/langfuse_nextauth_secret }
+  langfuse_encryption_key:    { file: ./secrets/langfuse_encryption_key }
+  clickhouse_password:        { file: ./secrets/clickhouse_password }
+  redis_password:             { file: ./secrets/redis_password }
+  redis_conf:                 { file: ./secrets/redis_conf }
+  minio_root_password:        { file: ./secrets/minio_root_password }
+  grafana_admin_password:     { file: ./secrets/grafana_admin_password }
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME}

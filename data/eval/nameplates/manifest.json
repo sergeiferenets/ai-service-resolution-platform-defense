@@ -1,0 +1,296 @@
+{
+  "generator": "data/generators/nameplates.py",
+  "generator_version": "1",
+  "seed": 20260915,
+  "plates": [
+    {
+      "file": "plate-01-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0011",
+      "partner_id": "CUST-008",
+      "manufacturer": "HP",
+      "model": "LaserJet Pro M4103dw",
+      "serial_on_plate": "HPL-M4103-77842",
+      "in_reference": true,
+      "degradation": {
+        "angle": 1.1,
+        "shade": 0.42,
+        "noise": 0.07,
+        "blur": 0.9,
+        "quality": 68
+      }
+    },
+    {
+      "file": "plate-02-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0001",
+      "partner_id": "CUST-001",
+      "manufacturer": "Pantum",
+      "model": "M6500W",
+      "serial_on_plate": "PNT-M6500W-21458",
+      "in_reference": true,
+      "degradation": {
+        "angle": 1.6,
+        "shade": 0.54,
+        "noise": 0.09,
+        "blur": 0.7,
+        "quality": 70
+      }
+    },
+    {
+      "file": "plate-03-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0002",
+      "partner_id": "CUST-002",
+      "manufacturer": "Kyocera",
+      "model": "ECOSYS M2135DN",
+      "serial_on_plate": "KYO-M2135-87932",
+      "in_reference": true,
+      "degradation": {
+        "angle": -5.6,
+        "shade": 0.44,
+        "noise": 0.12,
+        "blur": 0.5,
+        "quality": 45
+      }
+    },
+    {
+      "file": "plate-04-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0003",
+      "partner_id": "CUST-003",
+      "manufacturer": "HP",
+      "model": "LaserJet Pro M4103dw",
+      "serial_on_plate": "HPL-M4103-55671",
+      "in_reference": true,
+      "degradation": {
+        "angle": -6.6,
+        "shade": 0.53,
+        "noise": 0.11,
+        "blur": 0.8,
+        "quality": 51
+      }
+    },
+    {
+      "file": "plate-05-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0009",
+      "partner_id": "CUST-003",
+      "manufacturer": "Canon",
+      "model": "i-SENSYS MF463dw",
+      "serial_on_plate": "CAN-MF463-87654",
+      "in_reference": true,
+      "degradation": {
+        "angle": -0.2,
+        "shade": 0.46,
+        "noise": 0.07,
+        "blur": 0.6,
+        "quality": 55
+      }
+    },
+    {
+      "file": "plate-06-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0012",
+      "partner_id": "CUST-009",
+      "manufacturer": "Canon",
+      "model": "i-SENSYS MF463dw",
+      "serial_on_plate": "CAN-MF463-66519",
+      "in_reference": true,
+      "degradation": {
+        "angle": 2.9,
+        "shade": 0.54,
+        "noise": 0.07,
+        "blur": 0.9,
+        "quality": 52
+      }
+    },
+    {
+      "file": "plate-07-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0013",
+      "partner_id": "CUST-009",
+      "manufacturer": "Canon",
+      "model": "i-SENSYS MF463dw",
+      "serial_on_plate": "CAN-MF463-70318",
+      "in_reference": true,
+      "degradation": {
+        "angle": -4.8,
+        "shade": 0.48,
+        "noise": 0.06,
+        "blur": 1.0,
+        "quality": 67
+      }
+    },
+    {
+      "file": "plate-08-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0004",
+      "partner_id": "CUST-004",
+      "manufacturer": "Huawei",
+      "model": "MateBook D 15 (BoDE-WDH9)",
+      "serial_on_plate": "HUA-MBD15-34219",
+      "in_reference": true,
+      "degradation": {
+        "angle": 5.0,
+        "shade": 0.53,
+        "noise": 0.09,
+        "blur": 0.7,
+        "quality": 46
+      }
+    },
+    {
+      "file": "plate-09-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0005",
+      "partner_id": "CUST-005",
+      "manufacturer": "Lenovo",
+      "model": "ThinkBook 16+ 2024",
+      "serial_on_plate": "LEN-TB16-11287",
+      "in_reference": true,
+      "degradation": {
+        "angle": 5.5,
+        "shade": 0.44,
+        "noise": 0.1,
+        "blur": 0.5,
+        "quality": 54
+      }
+    },
+    {
+      "file": "plate-10-readable_found.jpg",
+      "group": "readable_found",
+      "equipment_id": "EQ-0006",
+      "partner_id": "CUST-006",
+      "manufacturer": "NexTouch",
+      "model": "NextPanel 75",
+      "serial_on_plate": "NEX-NP75-98234",
+      "in_reference": true,
+      "degradation": {
+        "angle": 5.2,
+        "shade": 0.49,
+        "noise": 0.08,
+        "blur": 0.4,
+        "quality": 53
+      }
+    },
+    {
+      "file": "plate-11-readable_unknown.jpg",
+      "group": "readable_unknown",
+      "equipment_id": "EQ-0011",
+      "partner_id": "CUST-008",
+      "manufacturer": "HP",
+      "model": "LaserJet Pro M4103dw",
+      "serial_on_plate": "HPL-M4103-77843",
+      "in_reference": false,
+      "degradation": {
+        "angle": -2.3,
+        "shade": 0.49,
+        "noise": 0.11,
+        "blur": 0.9,
+        "quality": 62
+      }
+    },
+    {
+      "file": "plate-12-readable_unknown.jpg",
+      "group": "readable_unknown",
+      "equipment_id": "EQ-0002",
+      "partner_id": "CUST-002",
+      "manufacturer": "Kyocera",
+      "model": "ECOSYS M2135DN",
+      "serial_on_plate": "KYO-M2135-40917",
+      "in_reference": false,
+      "degradation": {
+        "angle": 2.5,
+        "shade": 0.54,
+        "noise": 0.11,
+        "blur": 0.7,
+        "quality": 54
+      }
+    },
+    {
+      "file": "plate-13-readable_unknown.jpg",
+      "group": "readable_unknown",
+      "equipment_id": "EQ-0009",
+      "partner_id": "CUST-003",
+      "manufacturer": "Canon",
+      "model": "i-SENSYS MF463dw",
+      "serial_on_plate": "CAN-MF463-12093",
+      "in_reference": false,
+      "degradation": {
+        "angle": 1.6,
+        "shade": 0.52,
+        "noise": 0.11,
+        "blur": 1.0,
+        "quality": 51
+      }
+    },
+    {
+      "file": "plate-14-readable_unknown.jpg",
+      "group": "readable_unknown",
+      "equipment_id": "EQ-0001",
+      "partner_id": "CUST-001",
+      "manufacturer": "Pantum",
+      "model": "M6500W",
+      "serial_on_plate": "PNT-M6500W-88310",
+      "in_reference": false,
+      "degradation": {
+        "angle": 5.1,
+        "shade": 0.43,
+        "noise": 0.08,
+        "blur": 0.5,
+        "quality": 59
+      }
+    },
+    {
+      "file": "plate-15-unreadable.jpg",
+      "group": "unreadable",
+      "equipment_id": "EQ-0011",
+      "partner_id": "CUST-008",
+      "manufacturer": "HP",
+      "model": "LaserJet Pro M4103dw",
+      "serial_on_plate": "HPL-M4103-77842",
+      "in_reference": true,
+      "degradation": {
+        "angle": 23.7,
+        "shade": 0.12,
+        "noise": 0.4,
+        "blur": 7.0,
+        "quality": 10
+      }
+    },
+    {
+      "file": "plate-16-unreadable.jpg",
+      "group": "unreadable",
+      "equipment_id": "EQ-0012",
+      "partner_id": "CUST-009",
+      "manufacturer": "Canon",
+      "model": "i-SENSYS MF463dw",
+      "serial_on_plate": "CAN-MF463-66519",
+      "in_reference": true,
+      "degradation": {
+        "angle": 5.1,
+        "shade": 0.12,
+        "noise": 0.4,
+        "blur": 7.0,
+        "quality": 10
+      }
+    },
+    {
+      "file": "plate-17-unreadable.jpg",
+      "group": "unreadable",
+      "equipment_id": "EQ-0002",
+      "partner_id": "CUST-002",
+      "manufacturer": "Kyocera",
+      "model": "ECOSYS M2135DN",
+      "serial_on_plate": "KYO-M2135-87932",
+      "in_reference": true,
+      "degradation": {
+        "angle": -16.3,
+        "shade": 0.12,
+        "noise": 0.4,
+        "blur": 7.0,
+        "quality": 10
+      }
+    }
+  ]
+}

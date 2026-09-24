@@ -1,0 +1,39 @@
+{
+  "collection": {
+    "vectors": {
+      "dense": {
+        "size": 1024,
+        "distance": "Cosine",
+        "on_disk": false
+      }
+    },
+    "sparse_vectors": {
+      "bm25": {
+        "modifier": "idf",
+        "index": {
+          "on_disk": false
+        }
+      }
+    },
+    "optimizers_config": {
+      "default_segment_number": 2
+    }
+  },
+  "payload_indexes": [
+    { "field_name": "confidentiality_level", "field_schema": "keyword" },
+    { "field_name": "equipment_class", "field_schema": "keyword" },
+    { "field_name": "model_ref", "field_schema": "keyword" },
+    { "field_name": "document_id", "field_schema": "keyword" },
+    { "field_name": "section_no", "field_schema": "integer" },
+    {
+      "field_name": "content",
+      "field_schema": {
+        "type": "text",
+        "tokenizer": "multilingual",
+        "lowercase": true,
+        "min_token_len": 2,
+        "max_token_len": 30
+      }
+    }
+  ]
+}

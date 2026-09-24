@@ -1,0 +1,39 @@
+# Метрики стека. Профиль observability.
+# Инструмент разработчика: недоступность Prometheus на работу core не влияет.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: mvp
+    node: selectel-gpu
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # ПРОВЕРИТЬ НА МАШИНЕ: vLLM отдаёт /metrics в формате Prometheus.
+  # Если при заданном ключе эндпоинт начнёт требовать заголовок Authorization,
+  # добавить сюда authorization.credentials_file: /run/secrets/vllm_api_key
+  # и подключить секрет vllm_api_key к сервису prometheus в docker-compose.yml.
+  - job_name: vllm
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["vllm-llm:8000"]
+        labels: { model_role: llm }
+      - targets: ["vllm-vision:8000"]
+        labels: { model_role: vision }
+      - targets: ["vllm-embeddings:8000"]
+        labels: { model_role: embeddings }
+
+  - job_name: qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["qdrant:6333"]
+
+  # Появится вместе с профилем app.
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]

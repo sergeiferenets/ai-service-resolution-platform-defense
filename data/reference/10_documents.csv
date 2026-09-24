@@ -1,0 +1,27 @@
+doc_id,Название документа,Тип,Уровень доступа,К каким моделям относится,Источник,В корпусе знаний MVP
+DOC-001,Pantum M6200/M6500 Series — руководства и загрузки,Руководство производителя,Публичный,MOD-001,https://global.pantum.com/support/download/manual/,Да
+DOC-002,Kyocera ECOSYS M2135dn — Operation Guide и документация,Руководство производителя,Публичный,MOD-002,https://www.kyoceradocumentsolutions.co.uk/en/support/downloads.name-L2diL2VuL21mcC9FQ09TWVNNMjEzNURO.html,Да
+DOC-003,HP LaserJet Pro MFP 4101–4104 Series — User Guide,Руководство производителя,Публичный,MOD-003,https://support.hp.com/gb-en/product/setup-user-guides/hp-laserjet-pro-mfp-4101-4104dw-fdn-fdw-printer-series/model/38347975/,Да
+DOC-004,Canon i-SENSYS MF460 Series — User's Guide,Руководство производителя,Публичный,MOD-004,https://oip.manual.canon/USRMA-8699-zz-SSM-460-enGB/,Да
+DOC-005,Kyocera ECOSYS P2040dn — Operation Guide и документация,Руководство производителя,Публичный,MOD-005,https://www.kyoceradocumentsolutions.com/support_product/model_en.html?m=117&p=21&r=1&s=7,Да
+DOC-006,HUAWEI MateBook D 15 — поддержка и руководства,База знаний производителя,Публичный,MOD-006,https://consumer.huawei.com/en/support/,Нет — после MVP
+DOC-007,HONOR MagicBook X16 Pro 2024 — спецификация и поддержка,Документация производителя,Публичный,MOD-007,https://www.honor.com/global/laptops/honor-magicbook-x16-pro-2024/spec/,Нет — после MVP
+DOC-008,MacBook Air 13 (M1) — руководство пользователя и диагностика,Руководство производителя,Публичный,MOD-008,https://support.apple.com/guide/macbook-air/welcome/mac,Нет — после MVP
+DOC-009,Lenovo ThinkBook 14/16 G7+ — User Guide,Руководство производителя,Публичный,MOD-009,https://download.lenovo.com/pccbbs/pubs/thinkbook_16_14_g7plus/index_en.html,Нет — после MVP
+DOC-010,DEPO — серверы на базе Intel Xeon: каталог и документация,Документация производителя,Публичный,MOD-010,https://depo.ru/products/servers,Нет — после MVP
+DOC-011,YADRO VEGMAN — портал технической документации,Портал документации,Публичный,MOD-011,https://yadro.com/ru/documentation/,Нет — после MVP
+DOC-012,NexTouch NextPanel 75 — руководство для интерактивной панели,Руководство производителя,Публичный,MOD-012,https://www.citilink.ru/product/panel-interakt-nextouch-nextpanel-75-ifpcv1int75-75-ir-android-8-0-4k-1774416/documents/,Нет — после MVP
+DOC-013,TeachTouch TT-R2-75U — техническое описание и документация,Техническое описание,Публичный,MOD-013,https://www.foroffice.ru/products/description/209666.html,Нет — после MVP
+DOC-014,Newline Z Series / TT-7522Z — руководство пользователя,Руководство производителя,Публичный,MOD-014,https://newlineinteractive.freshdesk.com/support/solutions/articles/8000104219-z-series,Нет — после MVP
+DOC-015,ЭЛАР СКАМАКС 1000/2000 — техническое описание серии,Техническое описание,Публичный,MOD-015,https://elar.ru/press-center/news/elar-predstavlyaet-skamaks-1000-2000-rossiyskiy-potokovyy-skaner-dlya-vysokoproizvoditelnoy-otsifrov/,Нет — после MVP
+DOC-016,"Avision AD545GN — руководство, характеристики и поддержка",Руководство производителя,Публичный,MOD-016,https://www.avision.com/en/shop/document-scanner/ad545g-series/ad545gn/,Нет — после MVP
+DOC-017,Yealink UVC85 + CP50 — руководство и техническое описание,Руководство производителя,Публичный,MOD-017,https://support.yealink.com/document-detail/7bab9c265b38416eb9527a3e48841180,Нет — после MVP
+DOC-018,Yealink PVT160 — документация и база поддержки,База знаний производителя,Публичный,MOD-018,https://support.yealink.com/,Нет — после MVP
+DOC-019,TrueConf — руководства и база знаний,База знаний производителя,Публичный,MOD-019,https://trueconf.com/support.html,Нет — после MVP
+DOC-020,IVA — портал документации платформы ВКС,Портал документации,Публичный,MOD-020,https://iva.ru/docs/index.html,Нет — после MVP
+DOC-021,"Памятка инженера: замятия, печка, расходники и ошибки отправки",Внутренний технический бюллетень,Внутренний,MOD-001; MOD-002; MOD-003; MOD-004; MOD-005,На основе DOC-001–DOC-005 и записей листа 02_Коды_ошибок,Да
+DOC-022,"Памятка инженера: питание, батарея, перегрев и загрузка ноутбуков",Внутренний технический бюллетень,Внутренний,MOD-006; MOD-007; MOD-008; MOD-009,На основе DOC-006–DOC-009 и правил R-11–R-21,Нет — после MVP
+DOC-023,"Памятка инженера: PSU, FAN, ECC, RAID и POST серверов",Внутренний технический бюллетень,Внутренний,MOD-010; MOD-011,На основе DOC-010–DOC-011 и правил R-22–R-29,Нет — после MVP
+DOC-024,"Памятка инженера: питание, видеовходы, OPS и сенсор панелей",Внутренний технический бюллетень,Внутренний,MOD-012; MOD-013; MOD-014,На основе DOC-012–DOC-014 и правил R-30–R-35,Нет — после MVP
+DOC-025,"Памятка инженера: замятия, мультиподача и качество сканирования",Внутренний технический бюллетень,Внутренний,MOD-015; MOD-016,На основе DOC-015–DOC-016 и правил R-36–R-40,Нет — после MVP
+DOC-026,"Памятка инженера: камера, звук, регистрация и обновление ВКС",Внутренний технический бюллетень,Внутренний,MOD-017; MOD-018; MOD-019; MOD-020,На основе DOC-017–DOC-020 и правил R-41–R-46,Нет — после MVP
