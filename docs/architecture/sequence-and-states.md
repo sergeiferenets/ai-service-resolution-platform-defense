@@ -156,7 +156,7 @@ sequenceDiagram
 
     ORC->>ST: Сохранить technical process step<br/>recommendation_without_facts<br/>(гипотеза, sources, draft_blocked=true)
     Note over ST: Шаг доступен сотруднику<br/>через technical trace (/steps)
-    ORC->>UI: Статус деградации и эскалации;<br/>обычная recommendation отсутствует,<br/>создание draft заблокировано
+    ORC->>UI: Статус деградации и эскалации<br/>обычная recommendation отсутствует<br/>создание draft заблокировано
 
 ```
 
