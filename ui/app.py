@@ -50,6 +50,12 @@ STATUS_TONE = {
     "Отклонено": "error",
 }
 
+AGENT_TRACE = {
+    "ContextAgent": ("Context Agent", "identification", "llm.context"),
+    "LlmKnowledgeAgent": ("Knowledge Agent", "knowledge", "llm.knowledge"),
+    "LlmPolicyAgent": ("Policy Agent", "policy", "llm.policy"),
+}
+
 
 def client() -> httpx.Client:
     return httpx.Client(base_url=API_URL, timeout=TIMEOUT)
@@ -160,6 +166,26 @@ def show_draft(body: dict) -> None:
     st.caption(f"Ключ идемпотентности: {draft['idempotency_key']}; состояние: {draft['status']}")
 
 
+def agent_runtime_rows(agents: list[dict], steps: list[dict]) -> list[dict]:
+    """Сводит конфигурацию агентов с фактическим проходом FSM.
+
+    Наличие соответствующего process step — источник истины для вызова в
+    конкретном обращении. Ожидаемый tool call указан в AGENT_TRACE и остаётся
+    виден в полной таблице шагов ниже.
+    """
+    completed_steps = {step.get("step_name") for step in steps}
+    rows = []
+    for agent in agents:
+        class_name = agent.get("agent", "—")
+        label, step_name, _tool_name = AGENT_TRACE.get(class_name, (class_name, None, None))
+        rows.append({
+            "Агент": label,
+            "Реализован": "нет" if agent.get("stub", True) else "да",
+            "Вызван в этом обращении": "да" if step_name is not None and step_name in completed_steps else "нет",
+        })
+    return rows
+
+
 def show_technical(request_id: str, body: dict, status: int, payload: dict) -> None:
     """Трассировка: доступна только служебным ролям — это решает платформа,
     интерфейс лишь показывает её ответ."""
@@ -171,13 +197,13 @@ def show_technical(request_id: str, body: dict, status: int, payload: dict) -> N
             st.warning(f"Шаги недоступны: {payload}")
             return
 
+        steps = payload["steps"]
         recommendation = body.get("recommendation") or {}
         agents = recommendation.get("agents") or []
         if agents:
-            st.markdown("**Агенты**")
-            st.table([{"агент": a["agent"], "заглушка": "да" if a["stub"] else "нет"} for a in agents])
+            st.markdown("**Агенты и фактический вызов**")
+            st.table(agent_runtime_rows(agents, steps))
 
-        steps = payload["steps"]
         st.markdown("**Шаги обращения**")
         st.table([{
             "№": step["seq"],
